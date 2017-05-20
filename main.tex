@@ -97,4 +97,50 @@
 Decisions about what to plot, what to cut on, and how to bin are {\it iterative} and must be close to real time.
 \end{frame}
 
+\begin{frame}{This is a problem}
+Managing this chain, pushing new data through it, and keeping track of how it was made, becomes a problem in itself that distracts from the real problem of analyzing data.
+
+\vfill
+\begin{uncoverenv}<2->
+\begin{center}
+\begin{minipage}{0.77\linewidth}
+\textcolor{darkblue}{Assertion:} if physicists could make plots (and other aggregations for statistical analysis) directly from the collaboration's Analysis Object Data in real time, they would.
+\end{minipage}
+\end{center}
+\end{uncoverenv}
+\end{frame}
+
+\begin{frame}{Database-style interaction}
+\vspace{0.5 cm}
+\textcolor{darkblue}{Rapid queries on big data are possible, in fact, it's a big field:}
+
+\vspace{0.5 cm}
+\mbox{\hspace{-1 cm}
+\includegraphics[height=1.23 cm]{sparksql-logo.png}
+\includegraphics[height=1.23 cm]{impala-logo.png}
+\includegraphics[height=1.23 cm]{ibis-logo.png}
+\includegraphics[height=1.23 cm]{kudu-logo.png}
+\includegraphics[height=1.23 cm]{hawk-logo.png}
+\includegraphics[height=1.23 cm]{drill-logo.png}
+\includegraphics[height=1.23 cm]{dremel-logo.png}
+\includegraphics[height=1.23 cm]{bigquery-logo.png}}
+
+\vspace{0.5 cm}
+\begin{itemize}
+\item<2-> Instead of users maintaining private resources, they share a distributed query serer.
+\item<3-> Instead of fetching data from disk, \mbox{cache in RAM/SSD/X-Point.\hspace{-1 cm}}
+
+\begin{uncoverenv}<4->
+Input data required by different users has a large overlap.
+
+Gain large factors in usable cache from {\it sharing:}
+
+\vspace{-0.15 cm}
+\[ \frac{\mbox{cache useful to each user}}{\mbox{total cache / \#users}} \gg 1 \]
+\end{uncoverenv}
+
+\item<5-> Instead of evaluating user's code as-is, transform it to optimize memory bandwidth.
+\end{itemize}
+\end{frame}
+
 \end{document}
