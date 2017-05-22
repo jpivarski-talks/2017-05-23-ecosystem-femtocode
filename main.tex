@@ -255,6 +255,108 @@ muons@size: [3, 1, 1, 2, ...]
 \end{columns}
 \end{frame}
 
+\begin{frame}{Representing objects as flat arrays}
+\vspace{0.3 cm}
+For simple collections of records (e.g.\ particles), these arrays have the same interpretation as ROOT TLeaves:
+\begin{itemize}
+\item data arrays contain all values, ignoring event boundaries,
+\item size array contains the size of each event's collection.
+\end{itemize}
+
+\vfill
+\begin{uncoverenv}<2->
+Except for runtime calculations, rather than just on disk.
+\end{uncoverenv}
+
+\vfill
+\begin{uncoverenv}<3->
+For collections of collections (with fixed, known depth), we can extend this definition recursively:
+
+\vspace{0.3 cm}
+\textcolor{darkblue}{Given:} \hfill {\tt [} {\tt [} {\tt a} {\tt b} {\tt c} {\tt ]} {\tt [} {\tt d} {\tt e} {\tt f} {\tt g} {\tt ]} {\tt ]} {\tt [} {\tt [} {\tt h} {\tt ]} {\tt [} {\tt i} {\tt j} {\tt ]} {\tt ]}
+
+\textcolor{darkblue}{Data array:} \hfill {\tt \ } {\tt \ } {\tt a} {\tt b} {\tt c} {\tt \ } {\tt \ } {\tt d} {\tt e} {\tt f} {\tt g} {\tt \ } {\tt \ } {\tt \ } {\tt \ } {\tt h} {\tt \ } {\tt \ } {\tt i} {\tt j} {\tt \ } {\tt \ }
+
+\textcolor{darkblue}{Recursive counter:} \hfill \textcolor{darkorange}{\tt 2} \textcolor{blue}{\tt 3} {\tt \ } {\tt \ } {\tt \ } {\tt \ } \textcolor{blue}{\tt 4} {\tt \ } {\tt \ } {\tt \ } {\tt \ } {\tt \ } {\tt \ } \textcolor{darkorange}{\tt 2} \textcolor{blue}{\tt 1} {\tt \ } {\tt \ } \textcolor{blue}{\tt 2} {\tt \ } {\tt \ } {\tt \ } {\tt \ }
+\end{uncoverenv}
+\end{frame}
+
+\begin{frame}{Granular unit of parallelization}
+\vspace{0.5 cm}
+\begin{columns}
+\column{0.5\linewidth}
+\large
+Each query might touch any column, so the unit of parallelization is an group of columns with an integer number of events.
+\column{0.5\linewidth}
+\includegraphics[width=\linewidth]{groups.pdf}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Query system layout}
+\vspace{0.15 cm}
+\mbox{\hspace{-1.1 cm}\includegraphics[width=1.2\linewidth]{distributed-system-tall.pdf}}
+\end{frame}
+
+\begin{frame}[fragile]{Working example: dimuons}
+\vspace{0.15 cm}
+\scriptsize
+\begin{Verbatim}[commandchars=\\\{\}]
+pending = session.\textcolor{blue}{source}(\textcolor{red}{"ZZ_13TeV_pythia8"})
+    .\textcolor{blue}{define}(\textcolor{darkgreen}{mumass} = \textcolor{red}{"0.105658"})     \textcolor{gray}{# chain of operations on source}
+    .\textcolor{blue}{toPython}(\textcolor{darkgreen}{mass} = \textcolor{red}{"""}
+\textcolor{red}{muons.map(mu1 => muons.map(\{mu2 =>}   \textcolor{gray}{# doubly nested loop over muons}
+\textcolor{red}{  p1x = mu1.pt * cos(mu1.phi);}
+\textcolor{red}{  p1y = mu1.pt * sin(mu1.phi);}       \textcolor{gray}{# shares scope with other steps}
+\textcolor{red}{  p1z = mu1.pt * sinh(mu1.eta);}      \textcolor{gray}{# in the chain (see "mumass")}
+\textcolor{red}{  E1 = sqrt(p1x**2 + p1y**2 + p1z**2 + mumass**2);}
+
+\textcolor{red}{  p2x = mu2.pt * cos(mu2.phi);}
+\textcolor{red}{  p2y = mu2.pt * sin(mu2.phi);}
+\textcolor{red}{  p2z = mu2.pt * sinh(mu2.eta);}
+\textcolor{red}{  E2 = sqrt(p2x**2 + p2y**2 + p2z**2 + mumass**2);}
+
+\textcolor{red}{  px = p1x + p2x; py = p1y + p2y;}
+\textcolor{red}{  pz = p1z + p2z; E = E1 + E2;}
+
+\textcolor{gray}{  # "if" is required to avoid sqrt(-x)}
+\textcolor{red}{  if E**2 - px**2 - py**2 - pz**2 >= 0:}
+\textcolor{red}{    sqrt(E**2 - px**2 - py**2 - pz**2)}
+\textcolor{red}{  else:}
+\textcolor{red}{    None}   \textcolor{gray}{# output type is nullable}
+\textcolor{red}{\}))}
+\textcolor{red}{"""}).\textcolor{blue}{submit}()                        \textcolor{gray}{# asynchronous submission to}
+final = pending.\textcolor{blue}{await}()              \textcolor{gray}{# watch result accumulate}
+\end{Verbatim}
+
+\vspace{-4 cm}
+\hfill \textcolor{gray}{Yes, we see the Z peak.\hspace{0.25 cm}}
+
+\vspace{-0.2 cm}
+\hfill \mbox{\includegraphics[width=0.48\linewidth]{c1.png}\hspace{-1 cm}}
+\vspace{4 cm}
+\end{frame}
+
+\begin{frame}{Exploratory performance numbers}
+\vspace{0.5 cm}
+\textcolor{darkblue}{\underline{I/O-bounded operation ($+$) on 806\,177 jet $p_T$ values (6.15 MB):}}
+
+\vspace{-0.4 cm}
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{r l}
+3 ms & no-frills loop in C \\
+7 ms & Numpy's implementation \\
+\textcolor{darkblue}{14 ms} & \textcolor{darkblue}{full generality Femtocode event loop$^*$} \\
+24 ms & allocating C++ objects on stack and iterating \\
+64 ms & allocating C++ objects on heap, iterating, deleting \\
+518 ms & {\tt TTree::Draw} with {\tt TTreeCache} \\
+41900 ms & CMSSW EDAnalyzer (disk access)
+\end{tabular}
+\end{center}
+
+\vspace{0.5 cm}
+\textcolor{darkblue}{$^*$Not final.}
+\end{frame}
 
 
 \end{document}
